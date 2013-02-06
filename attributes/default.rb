@@ -6,3 +6,5 @@ default[:omnibus_updater][:cache_omnibus_installer] = false
 default[:omnibus_updater][:remove_chef_system_gem] = false
 default[:omnibus_updater][:allow_release_clients] = false
 default[:omnibus_updater][:disabled] = false
+default[:omnibus_udpater][:immediate_kill_on_upgrade] = true
+default[:omnibus_updater][:remove_old_packages] = false

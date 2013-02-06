@@ -22,4 +22,5 @@ else
   end
 end
 
+include_recipe 'omnibus_updater::old_package_cleaner' if node[:omnibus_updater][:remove_old_packages]
 include_recipe 'omnibus_updater::remove_chef_system_gem' if node[:omnibus_updater][:remove_chef_system_gem]
