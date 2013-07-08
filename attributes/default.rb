@@ -10,3 +10,5 @@ default[:omnibus_updater][:always_download] = false
 
 
 default[:omnibus_updater][:server][:version] = '11.0.4'
+default[:omnibus_updater][:server][:prereleases] = false
+default[:omnibus_updater][:server][:nightlies] = false

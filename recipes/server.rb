@@ -12,6 +12,8 @@ if(node['chef-server'] && !node['chef-server'][:package_file].to_s.include?(node
 end
 
 node.set['chef-server'][:version] = node[:omnibus_updater][:server][:version]
+node.set['chef-server'][:prereleases] = node[:omnibus_updater][:server][:prereleases]
+node.set['chef-server'][:nightlies] = node[:omnibus_updater][:server][:nightlies]
 
 execute 'Stop Chef Server for upgrade' do
   command 'chef-server-ctl stop'
@@ -30,4 +32,5 @@ path = Dir.glob(File.join(Chef::Config[:file_cache_path], '*chef-server*.*')).de
   path.include?(node[:omnibus_updater][:server][:version].to_s)
 end
 
+# TODO: Auto-checksum file pulled
 node.set['chef-server'][:package_file] = path if path
