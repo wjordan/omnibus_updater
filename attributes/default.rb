@@ -7,3 +7,6 @@ default[:omnibus_updater][:prerelease] = false
 default[:omnibus_updater][:disabled] = false
 default[:omnibus_updater][:kill_chef_on_upgrade] = true
 default[:omnibus_updater][:always_download] = false
+
+
+default[:omnibus_updater][:server][:version] = '11.0.4'
