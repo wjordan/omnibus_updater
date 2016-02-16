@@ -18,7 +18,6 @@
 #
 
 include_recipe 'omnibus_updater'
-remote_path = node[:omnibus_updater][:full_url].to_s
 
 file '/tmp/nocheck' do
   content 'conflict=nocheck\naction=nocheck'
@@ -34,8 +33,8 @@ ruby_block 'omnibus chef killer' do
     upgrade_behavior = node[:omnibus_updater][:upgrade_behavior]
     if upgrade_behavior == 'exec'
       if Chef::Config[:solo] or Chef::Config.local_mode
-        Chef::Log.info 'Cannot use omnibus_updater "exec" upgrade behavior in solo/local mode -- changing to "kill".'
-        upgrade_behavior = 'kill'
+#        Chef::Log.info 'Cannot use omnibus_updater "exec" upgrade behavior in solo/local mode -- changing to "kill".'
+#        upgrade_behavior = 'kill'
       elsif not RbConfig::CONFIG['host_os'].start_with?('linux')
         Chef::Log.info 'omnibus_updater "exec" upgrade behavior only supported on Linux -- changing to "kill".'
         upgrade_behavior = 'kill'
@@ -47,6 +46,11 @@ ruby_block 'omnibus chef killer' do
         Chef::Log.info 'Replacing ourselves with the new version of Chef to continue the run.'
         exec(node[:omnibus_updater][:exec_command], *ARGV)
       when 'kill'
+    if(Chef::Config[:client_fork] && Process.ppid != 1)
+      Chef::Log.warn 'Chef client is defined for forked runs. Sending TERM to parent process!'
+      Process.kill('TERM', Process.ppid)
+    end
+    Chef::Application.exit!('New omnibus chef version installed. Forcing chef exit!')
         raise 'New version of Chef omnibus installed. Aborting the Chef run, please restart it manually.'
       else
         raise "Unexpected upgrade behavior: #{node[:omnibus_updater][:upgrade_behavior]}"
@@ -55,23 +59,64 @@ ruby_block 'omnibus chef killer' do
   action :nothing
 end
 
-execute "omnibus_install[#{File.basename(remote_path)}]" do
-  case File.extname(remote_path)
-  when '.deb'
-    command "dpkg -i #{File.join(node[:omnibus_updater][:cache_dir], File.basename(remote_path))}"
-  when '.rpm'
-    command "rpm -Uvh --oldpackage #{File.join(node[:omnibus_updater][:cache_dir], File.basename(remote_path))}"
-  when '.sh'
-    command "/bin/sh #{File.join(node[:omnibus_updater][:cache_dir], File.basename(remote_path))}"
-  when '.solaris'
-    command "pkgadd -n -d #{File.join(node[:omnibus_updater][:cache_dir], File.basename(remote_path))} -a /tmp/nocheck chef"
-  else
-    raise "Unknown package type encountered for install: #{File.extname(remote_path)}"
+if(node[:omnibus_updater][:install_sh][:enabled])
+  resource_ident = "v#{node[:omnibus_updater].fetch(:version, 'latest')}"
+  script_path = File.join(Chef::Config[:file_cache_path], 'chef-client-install.sh')
+
+  remote_file script_path do
+    source node[:omnibus_updater][:install_sh][:url]
+    mode 0755
   end
-  if(node[:omnibus_updater][:restart_chef_service])
-    notifies :restart, resources(:service => 'chef-client'), :immediately
+
+  script_command = [script_path]
+  script_options = Mash.new(node[:omnibus_updater][:install_sh][:script_options].to_hash)
+
+  if(node[:omnibus_updater][:version])
+    script_options['-v'] = node[:omnibus_updater][:version]
   end
-  notifies :create, resources(:ruby_block => 'omnibus chef killer'), :immediately
+
+  script_command.push(script_options.flatten).flatten.compact.join(' ')
+
+  execute "omnibus_install[#{resource_ident}]" do
+    command script_command
+    action :nothing
+    if(node[:omnibus_updater][:restart_chef_service])
+      notifies :restart, resources(:service => 'chef-client'), :immediately
+    end
+    notifies :create, resources(:ruby_block => 'omnibus chef killer'), :immediately
+  end
+
+else
+  include_recipe 'omnibus_updater::downloader'
+
+  remote_path = node[:omnibus_updater][:full_url].to_s
+  resource_ident = File.basename(remote_path)
+
+  execute "omnibus_install[#{resource_ident}]" do
+    case File.extname(remote_path)
+    when '.deb'
+      command "dpkg -i #{File.join(node[:omnibus_updater][:cache_dir], File.basename(remote_path))}"
+    when '.rpm'
+      command "rpm -Uvh --oldpackage #{File.join(node[:omnibus_updater][:cache_dir], File.basename(remote_path))}"
+    when '.sh'
+      command "/bin/sh #{File.join(node[:omnibus_updater][:cache_dir], File.basename(remote_path))}"
+    when '.solaris'
+      command "pkgadd -n -d #{File.join(node[:omnibus_updater][:cache_dir], File.basename(remote_path))} -a /tmp/nocheck chef"
+    else
+      raise "Unknown package type encountered for install: #{File.extname(remote_path)}"
+    end
+    action :nothing
+    if(node[:omnibus_updater][:restart_chef_service])
+      notifies :restart, resources(:service => 'chef-client'), :immediately
+    end
+    notifies :create, resources(:ruby_block => 'omnibus chef killer'), :immediately
+  end
+
+end
+
+ruby_block 'Omnibus Chef install notifier' do
+  block{ true }
+  notifies :run, resources(:execute => "omnibus_install[#{resource_ident}]"), :delayed
   only_if { node['chef_packages']['chef']['version'] != node['omnibus_updater']['version'] }
 end
 

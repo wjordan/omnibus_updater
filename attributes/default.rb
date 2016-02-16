@@ -17,6 +17,9 @@
 # limitations under the License.
 #
 
+default[:omnibus_updater][:install_sh][:enabled] = false
+default[:omnibus_updater][:install_sh][:url] = 'https://www.getchef.com/chef/install.sh'
+default[:omnibus_updater][:install_sh][:script_options] = {}
 default[:omnibus_updater][:version] = nil
 default[:omnibus_updater][:force_latest] = false
 default[:omnibus_updater][:cache_dir] = "#{Chef::Config[:file_cache_path]}/omnibus_updater"
