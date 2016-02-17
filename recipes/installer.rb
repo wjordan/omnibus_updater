@@ -32,26 +32,22 @@ ruby_block 'omnibus chef killer' do
   block do
     upgrade_behavior = node[:omnibus_updater][:upgrade_behavior]
     if upgrade_behavior == 'exec'
-      if Chef::Config[:solo] or Chef::Config.local_mode
-#        Chef::Log.info 'Cannot use omnibus_updater "exec" upgrade behavior in solo/local mode -- changing to "kill".'
-#        upgrade_behavior = 'kill'
-      elsif not RbConfig::CONFIG['host_os'].start_with?('linux')
-        Chef::Log.info 'omnibus_updater "exec" upgrade behavior only supported on Linux -- changing to "kill".'
+      if not RbConfig::CONFIG['host_os'].start_with?('linux')
+        Chef::Log.warn 'omnibus_updater "exec" upgrade behavior only supported on Linux -- changing to "kill".'
         upgrade_behavior = 'kill'
       end
     end
 
     case upgrade_behavior
       when 'exec'
-        Chef::Log.info 'Replacing ourselves with the new version of Chef to continue the run.'
-        exec(node[:omnibus_updater][:exec_command], *ARGV)
+        Chef::Log.warn 'Replacing ourselves with the new version of Chef to continue the run.'
+        exec(node[:omnibus_updater][:exec_command], *node[:omnibus_updater][:exec_args])
       when 'kill'
-    if(Chef::Config[:client_fork] && Process.ppid != 1)
-      Chef::Log.warn 'Chef client is defined for forked runs. Sending TERM to parent process!'
-      Process.kill('TERM', Process.ppid)
-    end
-    Chef::Application.exit!('New omnibus chef version installed. Forcing chef exit!')
-        raise 'New version of Chef omnibus installed. Aborting the Chef run, please restart it manually.'
+        if(Chef::Config[:client_fork] && Process.ppid != 1)
+          Chef::Log.warn 'Chef client is defined for forked runs. Sending TERM to parent process!'
+          Process.kill('TERM', Process.ppid)
+        end
+        Chef::Application.exit!('New omnibus chef version installed. Forcing chef exit!')
       else
         raise "Unexpected upgrade behavior: #{node[:omnibus_updater][:upgrade_behavior]}"
     end
@@ -60,7 +56,9 @@ ruby_block 'omnibus chef killer' do
 end
 
 if(node[:omnibus_updater][:install_sh][:enabled])
+  include_recipe 'omnibus_updater::omnitruck_url'
   resource_ident = "v#{node[:omnibus_updater].fetch(:version, 'latest')}"
+
   script_path = File.join(Chef::Config[:file_cache_path], 'chef-client-install.sh')
 
   remote_file script_path do
@@ -75,7 +73,8 @@ if(node[:omnibus_updater][:install_sh][:enabled])
     script_options['-v'] = node[:omnibus_updater][:version]
   end
 
-  script_command.push(script_options.flatten).flatten.compact.join(' ')
+#  script_command.push(*script_options.flatten)
+script_command.push(script_options.flatten).flatten.compact.join(' ')
 
   execute "omnibus_install[#{resource_ident}]" do
     command script_command
@@ -114,10 +113,18 @@ else
 
 end
 
+version = node[:omnibus_updater][:version] || ''
+remote_path = OmnibusTrucker.url(
+  OmnibusTrucker.build_url(node,
+    :version => node[:omnibus_updater][:force_latest] ? nil : version.sub(/\-.+$/, ''),
+    :prerelease => node[:omnibus_updater][:preview]
+  ), node
+)
+
 ruby_block 'Omnibus Chef install notifier' do
   block{ true }
-  notifies :run, resources(:execute => "omnibus_install[#{resource_ident}]"), :delayed
-  only_if { node['chef_packages']['chef']['version'] != node['omnibus_updater']['version'] }
+  notifies :run, resources(:execute => "omnibus_install[#{resource_ident}]"), :immediately
+  only_if { node[:omnibus_updater][:update_needed] }
 end
 
 include_recipe 'omnibus_updater::old_package_cleaner'

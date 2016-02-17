@@ -29,7 +29,8 @@ default[:omnibus_updater][:prerelease] = false
 default[:omnibus_updater][:disabled] = false
 default[:omnibus_updater][:upgrade_behavior] = 'exec'
 default[:omnibus_updater][:upgrade_notification] = :immediately
-default[:omnibus_updater][:exec_command] = 'chef-client'
+default[:omnibus_updater][:exec_command] = $0.split(' ').first
+default[:omnibus_updater][:exec_args] = ARGV
 # restore the 'classic' behavior with:
 # default[:omnibus_updater][:upgrade_behavior] = 'kill'
 # default[:omnibus_updater][:upgrade_notification] = :delayed
