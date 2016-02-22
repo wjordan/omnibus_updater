@@ -29,6 +29,14 @@ service 'chef-client' do
   action :nothing
 end
 
+Chef::Config[:pid_file] ||= node[:omnibus_updater][:pid_file]
+
+execute "run chef-client" do
+  command lazy { "kill -s USR1 #{Chef::Daemon.pid_from_file}" }
+  action :nothing
+  only_if { Chef::Daemon.pid_from_file }
+end
+
 version = node[:omnibus_updater][:force_latest] ? :latest :
   node[:omnibus_updater].fetch(:version, :latest)
 
@@ -38,6 +46,7 @@ execute "omnibus_install[v#{version}]" do
 
   if node[:omnibus_updater][:restart_chef_service]
     notifies :restart, resources(:service => 'chef-client'), :immediately
+    notifies :run, resources(:execute => 'run chef-client'), :immediately
   end
   if node[:omnibus_updater][:kill_chef_on_upgrade]
     notifies :create, resources(:ruby_block => 'omnibus chef killer'), node[:omnibus_updater][:upgrade_notification]
