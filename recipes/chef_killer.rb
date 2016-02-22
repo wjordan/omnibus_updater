@@ -26,10 +26,10 @@ ruby_block 'omnibus chef killer' do
         exec(node[:omnibus_updater][:exec_command], *node[:omnibus_updater][:exec_args])
       when 'kill'
         if Chef::Config[:client_fork] && Process.ppid != 1
-          Chef::Log.warn 'Chef client is defined for forked runs. Sending TERM to parent process!'
-          Process.kill('TERM', Process.ppid)
+          Chef::Log.warn 'Chef client is forked. Sending USR2 to reload parent process!'
+          Process.kill('USR2', Process.ppid)
         end
-        Chef::Application.exit!('New omnibus chef version installed. Forcing chef exit!')
+        Chef::Application.exit!('New omnibus chef version installed. Forcing chef exit!', 0)
       else
         raise "Unexpected upgrade behavior: #{node[:omnibus_updater][:upgrade_behavior]}"
     end
